@@ -39,31 +39,46 @@ class Event:
 			self.event = string
 			self.outcome = None
 
+	def getVariable(self):
+		return self.event
+
 	def __repr__(self):
 		return self.event + (' = ' + ('+' if self.outcome else '-') if self.isDecided else '')
 	def __str__(self):
 		return self.__repr__()
 
-class Node():
-	def __init__(self, headerLine, dataLines):
-		self.variables = filter(None, re.split("[| ]+", headerLine))
-		self.parseAndSaveCpt(dataLines)
-		# self.setCompleteCpt()
-		print 
+class Factor():
+	# http://stackoverflow.com/a/141777/5920930
+	def __init__(self, var, cpt):
+		self.var = var
+		self.cpt = cpt
 
-	def parseAndSaveCpt(self, dataLines):
-		self.cpt = {}
-		entries = [self.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
-		map(self.cpt.update, entries)
-		print self.cpt
+	@classmethod
+	def fromData(cls, var, cpt):
+		return cls(var, cpt)
 
-	def makeEntry(self, ls):
+	@classmethod
+	def fromLines(cls, headerLine, dataLines):
+		var = filter(None, re.split("[| ]+", headerLine))
+		cpt = {}
+		entries = [cls.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
+		map(cpt.update, entries)
+		return cls(var, cpt)
+
+	@classmethod
+	def makeEntry(cls, ls):
 		value = float(ls[0])
 		if len(ls) == 1:
 			return {(True,): value, (False,): 1 - value}
 		else:
 			originalKey = [(True if sign == '+' else False) for sign in ls[1].split(' ')]
 			return {tuple([True] + originalKey) : value, tuple([False] + originalKey) : 1 - value}
+
+	def getVariables(self):
+		return self.var[:] # a list of string
+
+	def __repr__(self):
+		return ', '.join(self.var) + '\n\t' + '\n\t'.join(str(e) + ' : ' + str(self.cpt[e]) for e in self.cpt) + '\n\n'
 
 class Query:
 	def __init__(self, string):
@@ -80,6 +95,13 @@ class Query:
 		else:
 			self.x = [Event(X) for X in events.split(', ')]
 			self.e = None
+
+	def getVaribales(self):
+		return [event.getVariable() for event in self.x]
+
+	def getEvidences(self):
+		return [event.getVariable() for event in self.e] if bool(self.e) else []
+
 	def __repr__(self):
 		return self.queryType + '(' + ', '.join(str(X) for X in self.x) + (' | ' + ', '.join(str(E) for E in self.e) if self.isConditional else '') + ')'
 	def __str__(self):
@@ -99,30 +121,66 @@ class ProbabilisticInferenceSystem:
 			else:
 				break
 		
-		self.bayesianNetwork = []
-		# read nodes
+		self.bn = []
+		# read factors
 		while True:
 			line = nextLine(f)
 			if bool(line):
-				nodeHeaderLine = ""
-				nodeDataLines = []
+				factorHeaderLine = ""
+				factorDataLines = []
 				currentLineIsHeader = True
 				while bool(line) and not '*' in line:
 					if currentLineIsHeader:
-						nodeHeaderLine = line
+						factorHeaderLine = line
 						currentLineIsHeader = False
 						line = nextLine(f)
 					else:
-						nodeDataLines.append(line)
+						factorDataLines.append(line)
 						line = nextLine(f)
-				node = Node(nodeHeaderLine, nodeDataLines)
-				self.bayesianNetwork.append(node)
+				factor = Factor.fromLines(factorHeaderLine, factorDataLines)
+				self.bn.append(factor)
 			else:
 				break
 
 		f.close()
 
 	def analyze(self):
+		print self.bn
+		print '********************************'
+		print 
+		for query in self.queryList:
+			print query
+			self.elimanationAsk(query.getVaribales(), query.getEvidences())
+
+	def elimanationAsk(self, X, e):
+		factors = self.bn[:] # deepcopy 
+		allVar = list(set().union(*[f.getVariables() for f in factors]))
+
+		for var in allVar: # var is a string
+			if not var in e and not var in X:
+				print "var:\n" + var + '\n'
+				print "factors:\n " + str(factors)
+				relevantFactors = filter(lambda f: var in f.getVariables(), factors)
+				factors = [f for f in factors if f not in relevantFactors]
+				print "relevantFactors:\n " + str(relevantFactors)
+				print '*********'
+				print 
+				factors.append(self.sumOut(var, self.pointwiseProduct(relevantFactors)))
+		return self.normalize(self.pointwiseProduct(factors))
+
+	def sumOut(self, whatt, hehell):
+		# The summing-out process takes all the factors that depend on a given variable and replaces them with a single new factor that does not depend on that variable (by summing over all possible values of the variable).
+		pass
+
+	def pointwiseProduct(self, factors):
+		print 
+		print '========= this is pointwiseProduct part ==='
+		print factors
+
+		print '==========================================='
+		print 
+
+	def normalize(self, what):
 		pass
 
 	def writeToLog(self, keyword, goal = None):
