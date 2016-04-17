@@ -122,33 +122,23 @@ class ProbabilisticInferenceSystem:
 
 		f.close()
 
-	# def writeToLog(self, keyword, goal = None):
-	# 	goalString = ": " + str(goal.getUnderscoredVersion()) if not goal is None else ""
-	# 	tempLogLine = keyword + goalString + "\r\n";
-	# 	# MAGIC HERE, DON'T TOUCH!
-	# 	# self.logCheck["True"] = "ASTRINGCOULDNEVERBELIKETHIS!"
-	# 	# self.logCheck["False"] = "NSTRINGCOULDNEVERBELIKETHIS!"
-	# 	if True:#not self.logCheck[keyword] == tempLogLine: 
-	# 		if True:#not tempLogLine == self.stringBuffer:
-	# 			self.log += tempLogLine
-	# 			self.stringBuffer = tempLogLine
-	# 			self.logCheck[keyword] = tempLogLine
-
-	# def exportTextFile(self, fileName):
-	# 	f = open(fileName, "w")
-	# 	f.write(self.log.rstrip("\r\n"))
-	# 	f.close()
-	# 	# print("{} is exported.".format(fileName))
-
 	def analyze(self):
 		pass
+
+	def writeToLog(self, keyword, goal = None):
+		pass
+
+	def exportTextFile(self, fileName):
+		f = open(fileName, "w")
+		f.write(self.log.rstrip("\r\n"))
+		f.close()
 
 def main(argv):
 	pis = ProbabilisticInferenceSystem('samples/sample01.txt')
 	pis.analyze()
 	# if argv[1] == '-i':
-	# 	ls = LogicSystem(argv[2])
-	# 	result = ls.prove()
-	# 	ls.exportTextFile("output.txt")
+	# 	pis = ProbabilisticInferenceSystem(argv[2])
+	# 	pis.analyze()
+	# 	pis.exportTextFile("output.txt")
 
 if __name__ == "__main__": main(sys.argv)
