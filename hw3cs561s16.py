@@ -49,7 +49,7 @@ class Event:
 	def __str__(self):
 		return self.__repr__()
 
-class Factor():
+class Factor:
 	# http://stackoverflow.com/a/141777/5920930
 	def __init__(self, var, cpt):
 		self.var = var
@@ -63,14 +63,25 @@ class Factor():
 	def fromLines(cls, headerLine, dataLines):
 		var = filter(None, re.split("[| ]+", headerLine))
 		# print dataLines
-		if dataLines[0] == 'decision':
-			cpt = {(True,): 1, (False,): 1}
-			return cls(var, cpt)
+		if False:#var[0] == 'utility':
+			# cpt = {}
+			# for dataLine in dataLines:
+			# 	[valStr,sign] = dataLine.split(' ')
+			# 	keyBool = True if sign == '+' else False
+
+			# 	cpt.update({(True, keyBool): float(valStr)})
+			# 	cpt.update({(False, keyBool): 0})
+			# return cls(var, cpt)
+			pass
 		else:
-			cpt = {}
-			entries = [cls.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
-			map(cpt.update, entries)
-			return cls(var, cpt)
+			if dataLines[0] == 'decision':
+				cpt = {(True,): 1, (False,): 1}
+				return cls(var, cpt)
+			else:
+				cpt = {}
+				entries = [cls.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
+				map(cpt.update, entries)
+				return cls(var, cpt)
 
 	@classmethod
 	def makeEntry(cls, ls):
@@ -158,6 +169,9 @@ class Factor():
 	def getVariables(self):
 		return self.var[:] # a list of string
 
+	def isUtility(self):
+		return self.var[0] == 'utility'
+
 	def __repr__(self):
 		return ', '.join(self.var) + '\n\t' + '\n\t'.join(str(e) + ' : ' + str(self.cpt[e]) for e in self.cpt) + '\n\n'
 
@@ -177,7 +191,7 @@ class Query:
 			self.x = [Event(X) for X in events.split(', ')]
 			self.e = None
 
-	def getVaribales(self):
+	def getVariables(self):
 		return [event.getVariable() for event in self.x]
 
 	def getEvidences(self):
@@ -186,6 +200,14 @@ class Query:
 		return {event.event : event.outcome for event in self.e} if bool(self.e) else {}
 	def getVariablesEvents(self):
 		return {event.event : event.outcome for event in self.x}
+
+	def getAllWithSigns(self):
+		# for utility:
+		# EU(Infiltration = + | LeakIdea = +) =>
+		# Infiltration = +, LeakIdea = +
+		xString = ', '.join([str(event.event) + ' = ' + '+' if event.outcome else '-' for event in self.x])
+		eString = ', '.join([str(event.event) + ' = ' + '+' if event.outcome else '-' for event in self.e]) if bool(self.e) else ''
+		return xString + (', ' + eString if bool(self.e) else '')
 
 	def __repr__(self):
 		return self.queryType + '(' + ', '.join(str(X) for X in self.x) + (' | ' + ', '.join(str(E) for E in self.e) if self.isConditional else '') + ')'
@@ -232,32 +254,48 @@ class ProbabilisticInferenceSystem:
 
 	def analyze(self):
 		# print 
-		# print '************ bn ****************'
-		# print self.bn
-		# print '********************************'
+		print '************ bn ****************'
+		print self.bn
+		print '********************************'
 
 		for query in self.queryList:
+			print query
 			if query.queryType == 'P':
-				self.eliminationAsk(query)
+				result = self.eliminationAsk(query)
 			elif query.queryType == 'EU':
-				self.calculateEU(query)
+				result = self.calculateEU(query)
 			elif query.queryType == 'MEU':
-				self.calculateMEU(query)
+				result = self.calculateMEU(query)
+			self.writeToLog(result, query.queryType)
 		self.exportTextFile("output.txt")
 
 	def calculateEU(self, query):
-		# print ">>> calculate - EU"
-		# print query
-		pass
-
+		print ">>> calculate - EU"
+		print query
+		u = self.getUtility();
+		print u
+		print "new query is: " + query.getAllWithSigns()
+		utility = 0
+		for tf in [True, False]:
+			sign = '+' if tf else '-'
+			pQueryString = 'P(' + u.getVariables()[1] + ' = ' + sign + ' | ' + query.getAllWithSigns() + ')'
+			p = self.eliminationAsk(Query(pQueryString))
+			print pQueryString + ' = ' + str(p)
+			utility = utility + u.cpt[(True, tf)] * p
+		return utility
 
 	def calculateMEU(self, query):
 		# print ">>> calculate - MEU"
 		# print query
-		pass
+		return 0
+
+	def getUtility(self):
+		for each in self.bn:
+			if each.isUtility():
+				return each
 
 	def eliminationAsk(self, query):
-		X = query.getVaribales()
+		X = query.getVariables()
 		e = query.getEvidences()
 
 		factors = self.bn[:] # deepcopy 
@@ -273,7 +311,7 @@ class ProbabilisticInferenceSystem:
 				# print '*********'
 				# print 
 				factors.append(self.sumOut(var, self.pointwiseProduct(relevantFactors)))
-		self.writeToLog(self.pointwiseProduct(factors).normalize(query))
+		return self.pointwiseProduct(factors).normalize(query)
 
 	def sumOut(self, var, factor):
 		r = factor.sumOut(var, self.bn)
@@ -285,8 +323,13 @@ class ProbabilisticInferenceSystem:
 		# print "ptwPdt " + str(r)
 		return r
 
-	def writeToLog(self, f):
-		text = Decimal(f).quantize(Decimal('.01'))
+	def writeToLog(self, result, task):
+		if task == 'P':
+			text =  Decimal(result).quantize(Decimal('.01'))
+		elif task == 'EU':
+			text = int(round(result))
+		elif task == 'MEU':
+			text = result ###??
 		self.log += str(text) + '\n'
 
 	def exportTextFile(self, fileName):
