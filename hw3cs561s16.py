@@ -62,10 +62,10 @@ class Factor():
 	@classmethod
 	def fromLines(cls, headerLine, dataLines):
 		var = filter(None, re.split("[| ]+", headerLine))
-		print dataLines
+		# print dataLines
 		if dataLines[0] == 'decision':
-			print 'this is decision!'
-			return cls(var, {})
+			cpt = {(True,): 1, (False,): 1}
+			return cls(var, cpt)
 		else:
 			cpt = {}
 			entries = [cls.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
@@ -206,7 +206,7 @@ class ProbabilisticInferenceSystem:
 			else:
 				break
 		
-		print self.queryList
+		# print self.queryList
 		self.bn = []
 		# read factors
 		while True:
@@ -231,26 +231,31 @@ class ProbabilisticInferenceSystem:
 		f.close()
 
 	def analyze(self):
+		# print 
+		# print '************ bn ****************'
 		# print self.bn
 		# print '********************************'
-		# print 
+
 		for query in self.queryList:
-			# print query
-			if query.queryType is 'P':
+			if query.queryType == 'P':
 				self.eliminationAsk(query)
-			elif query.queryType is 'EU':
+			elif query.queryType == 'EU':
 				self.calculateEU(query)
-			elif query.queryType is 'MEU':
+			elif query.queryType == 'MEU':
 				self.calculateMEU(query)
 		self.exportTextFile("output.txt")
 
-	def calculateEU(query):
+	def calculateEU(self, query):
+		# print ">>> calculate - EU"
+		# print query
 		pass
 
-	def calculateMEU(query):
 
+	def calculateMEU(self, query):
+		# print ">>> calculate - MEU"
+		# print query
 		pass
-		
+
 	def eliminationAsk(self, query):
 		X = query.getVaribales()
 		e = query.getEvidences()
@@ -290,8 +295,7 @@ class ProbabilisticInferenceSystem:
 		f.close()
 
 def main(argv):
-	pis = ProbabilisticInferenceSystem('samples/sample01.txt')
-	pis.analyze()
+	ProbabilisticInferenceSystem('samples/sample02.txt').analyze()
 	# if argv[1] == '-i':
 	# 	pis = ProbabilisticInferenceSystem(argv[2])
 	# 	pis.analyze()
