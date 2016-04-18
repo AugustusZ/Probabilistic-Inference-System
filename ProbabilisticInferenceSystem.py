@@ -74,6 +74,56 @@ class Factor():
 			originalKey = [(True if sign == '+' else False) for sign in ls[1].split(' ')]
 			return {tuple([True] + originalKey) : value, tuple([False] + originalKey) : 1 - value}
 
+	def pointwiseProduct(self, other, bn):
+		vars = list(set(self.var) | set(other.var))
+		cpt = dict((self.event_values(e, vars), self.p(e) * other.p(e)) for e in self.all_events(vars, bn, {}))
+		return Factor(vars, cpt)
+
+	def sumOut(self, var, bn):
+		vars = [X for X in self.var if X != var]
+		cpt = dict((self.event_values(e, vars), sum(self.p(self.extend(e, var, val)) for val in [True, False])) for e in self.all_events(vars, bn, {}))
+		return Factor(vars, cpt)
+
+	def normalize(self, occurrence):
+		print " -- VAR: " + str(self.var)
+		print " -- CPT: " + str(self.cpt)
+		# assert len(self.var) == 1
+		return {self.var[0] : dict((k, v) for ((k,), v) in self.cpt.items())}
+
+	def all_events(self, vars, bn, e):
+		"Yield every way of extending e with values for all vars."
+		if not vars:
+			yield e
+		else:
+			X, rest = vars[0], vars[1:]
+			for e1 in self.all_events(rest, bn, e):
+				for x in [True, False]:
+					yield self.extend(e1, X, x)
+	def p(self, e):
+		"Look up my value tabulated for e."
+		return self.cpt[self.event_values(e, self.var)]
+
+	def extend(self, s, var, val):
+		# """Copy the substitution s and extend it by setting var to val; return copy.
+		# >>> extend({x: 1}, y, 2)
+		# {y: 2, x: 1}
+		# """
+		s2 = s.copy()
+		s2[var] = val
+		return s2
+
+	def event_values(self, event, vars):
+		# """Return a tuple of the values of variables vars in event.
+		# >>> event_values ({'A': 10, 'B': 9, 'C': 8}, ['C', 'A'])
+		# (8, 10)
+		# >>> event_values `((1, 2), ['C', 'A'])
+		# (1, 2)
+		# """
+		if isinstance(event, tuple) and len(event) == len(vars):
+			return event
+		else:
+			return tuple([event[var] for var in vars])
+
 	def getVariables(self):
 		return self.var[:] # a list of string
 
@@ -150,9 +200,9 @@ class ProbabilisticInferenceSystem:
 		print 
 		for query in self.queryList:
 			print query
-			self.elimanationAsk(query.getVaribales(), query.getEvidences())
+			self.eliminationAsk(query.getVaribales(), query.getEvidences())
 
-	def elimanationAsk(self, X, e):
+	def eliminationAsk(self, X, e):
 		factors = self.bn[:] # deepcopy 
 		allVar = list(set().union(*[f.getVariables() for f in factors]))
 
@@ -166,22 +216,21 @@ class ProbabilisticInferenceSystem:
 				print '*********'
 				print 
 				factors.append(self.sumOut(var, self.pointwiseProduct(relevantFactors)))
-		return self.normalize(self.pointwiseProduct(factors))
+		print self.normalize(self.pointwiseProduct(factors))
 
-	def sumOut(self, whatt, hehell):
-		# The summing-out process takes all the factors that depend on a given variable and replaces them with a single new factor that does not depend on that variable (by summing over all possible values of the variable).
-		pass
+	def sumOut(self, var, factor):
+		r = factor.sumOut(var, self.bn)
+		print "sumOut: " + str(r)
+		return r
 
 	def pointwiseProduct(self, factors):
-		print 
-		print '========= this is pointwiseProduct part ==='
-		print factors
+		r = reduce(lambda f, g: f.pointwiseProduct(g, self.bn), factors)
+		print "ptwPdt " + str(r)
+		return r
 
-		print '==========================================='
-		print 
-
-	def normalize(self, what):
-		pass
+	def normalize(self, factor):
+		print "~~~~~~~"
+		print factor
 
 	def writeToLog(self, keyword, goal = None):
 		pass
