@@ -62,10 +62,15 @@ class Factor():
 	@classmethod
 	def fromLines(cls, headerLine, dataLines):
 		var = filter(None, re.split("[| ]+", headerLine))
-		cpt = {}
-		entries = [cls.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
-		map(cpt.update, entries)
-		return cls(var, cpt)
+		print dataLines
+		if dataLines[0] == 'decision':
+			print 'this is decision!'
+			return cls(var, {})
+		else:
+			cpt = {}
+			entries = [cls.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
+			map(cpt.update, entries)
+			return cls(var, cpt)
 
 	@classmethod
 	def makeEntry(cls, ls):
@@ -75,6 +80,7 @@ class Factor():
 		else:
 			originalKey = [(True if sign == '+' else False) for sign in ls[1].split(' ')]
 			return {tuple([True] + originalKey) : value, tuple([False] + originalKey) : 1 - value}
+
 
 	def pointwiseProduct(self, other, bn):
 		# vars = self.unionVar(self.var, other.var)
@@ -200,6 +206,7 @@ class ProbabilisticInferenceSystem:
 			else:
 				break
 		
+		print self.queryList
 		self.bn = []
 		# read factors
 		while True:
@@ -229,9 +236,21 @@ class ProbabilisticInferenceSystem:
 		# print 
 		for query in self.queryList:
 			# print query
-			self.eliminationAsk(query)
+			if query.queryType is 'P':
+				self.eliminationAsk(query)
+			elif query.queryType is 'EU':
+				self.calculateEU(query)
+			elif query.queryType is 'MEU':
+				self.calculateMEU(query)
 		self.exportTextFile("output.txt")
 
+	def calculateEU(query):
+		pass
+
+	def calculateMEU(query):
+
+		pass
+		
 	def eliminationAsk(self, query):
 		X = query.getVaribales()
 		e = query.getEvidences()
@@ -261,12 +280,6 @@ class ProbabilisticInferenceSystem:
 		# print "ptwPdt " + str(r)
 		return r
 
-	# def normalize(self, factor, query):
-	# 	print "~~~~~~~"
-	# 	print factor
-
-
-
 	def writeToLog(self, f):
 		text = Decimal(f).quantize(Decimal('.01'))
 		self.log += str(text) + '\n'
@@ -277,10 +290,10 @@ class ProbabilisticInferenceSystem:
 		f.close()
 
 def main(argv):
-	# pis = ProbabilisticInferenceSystem('samples/sample01.txt')
-	# pis.analyze()
-	if argv[1] == '-i':
-		pis = ProbabilisticInferenceSystem(argv[2])
-		pis.analyze()
+	pis = ProbabilisticInferenceSystem('samples/sample01.txt')
+	pis.analyze()
+	# if argv[1] == '-i':
+	# 	pis = ProbabilisticInferenceSystem(argv[2])
+	# 	pis.analyze()
 
 if __name__ == "__main__": main(sys.argv)
