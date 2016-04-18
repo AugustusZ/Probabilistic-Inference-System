@@ -5,6 +5,8 @@ import sys
 import copy # to deep copy a dict: d2 = copy.deepcopy(d)
 import re
 import itertools
+import numpy
+from decimal import *
 
 ###############################################################################
 # helper function definitions:
@@ -75,6 +77,7 @@ class Factor():
 			return {tuple([True] + originalKey) : value, tuple([False] + originalKey) : 1 - value}
 
 	def pointwiseProduct(self, other, bn):
+		# vars = self.unionVar(self.var, other.var)
 		vars = list(set(self.var) | set(other.var))
 		cpt = dict((self.event_values(e, vars), self.p(e) * other.p(e)) for e in self.all_events(vars, bn, {}))
 		return Factor(vars, cpt)
@@ -84,11 +87,34 @@ class Factor():
 		cpt = dict((self.event_values(e, vars), sum(self.p(self.extend(e, var, val)) for val in [True, False])) for e in self.all_events(vars, bn, {}))
 		return Factor(vars, cpt)
 
-	def normalize(self, occurrence):
+	def normalize(self, query):#occurrence
 		print " -- VAR: " + str(self.var)
 		print " -- CPT: " + str(self.cpt)
 		# assert len(self.var) == 1
-		return {self.var[0] : dict((k, v) for ((k,), v) in self.cpt.items())}
+		vs = self.var
+		e = query.getEvidencesEvents()
+		x = query.getVariablesEvents()
+		d = self.cpt
+		eventList = vs[:]
+		for i, var in enumerate(vs):
+			if var in e:
+				eventList[i] = e[var]
+			else:
+				eventList[i] = None
+		keys = []
+		for t in getTruthCombination(len(x)):
+			E = numpy.array(eventList)
+			E[[i for i in range(len(eventList)) if eventList[i] is None]] = list(t)
+			keys.append(tuple(list(E)))
+		
+		eventList = vs[:]
+		for i, var in enumerate(vs):
+			if var in e:
+				eventList[i] = e[var]
+			else:
+				eventList[i] = x[var]
+		return d[tuple(eventList)] / sum([d[key] for key in keys])
+		# return {self.var[0] : dict((k, v) for ((k,), v) in self.cpt.items())}
 
 	def all_events(self, vars, bn, e):
 		"Yield every way of extending e with values for all vars."
@@ -104,10 +130,7 @@ class Factor():
 		return self.cpt[self.event_values(e, self.var)]
 
 	def extend(self, s, var, val):
-		# """Copy the substitution s and extend it by setting var to val; return copy.
-		# >>> extend({x: 1}, y, 2)
-		# {y: 2, x: 1}
-		# """
+		# extend({x: 1}, y, 2) = {y: 2, x: 1}
 		s2 = s.copy()
 		s2[var] = val
 		return s2
@@ -123,6 +146,10 @@ class Factor():
 			return event
 		else:
 			return tuple([event[var] for var in vars])
+
+	# def unionVar(self, v1, v2):
+	# 	v = v1 + v2
+	# 	return v
 
 	def getVariables(self):
 		return self.var[:] # a list of string
@@ -151,6 +178,10 @@ class Query:
 
 	def getEvidences(self):
 		return [event.getVariable() for event in self.e] if bool(self.e) else []
+	def getEvidencesEvents(self):
+		return {event.event : event.outcome for event in self.e} if bool(self.e) else {}
+	def getVariablesEvents(self):
+		return {event.event : event.outcome for event in self.x}
 
 	def __repr__(self):
 		return self.queryType + '(' + ', '.join(str(X) for X in self.x) + (' | ' + ', '.join(str(E) for E in self.e) if self.isConditional else '') + ')'
@@ -200,9 +231,13 @@ class ProbabilisticInferenceSystem:
 		print 
 		for query in self.queryList:
 			print query
-			self.eliminationAsk(query.getVaribales(), query.getEvidences())
+			self.eliminationAsk(query)
+		self.exportTextFile("output.txt")
 
-	def eliminationAsk(self, X, e):
+	def eliminationAsk(self, query):
+		X = query.getVaribales()
+		e = query.getEvidences()
+
 		factors = self.bn[:] # deepcopy 
 		allVar = list(set().union(*[f.getVariables() for f in factors]))
 
@@ -216,7 +251,7 @@ class ProbabilisticInferenceSystem:
 				print '*********'
 				print 
 				factors.append(self.sumOut(var, self.pointwiseProduct(relevantFactors)))
-		print self.normalize(self.pointwiseProduct(factors))
+		self.writeToLog(self.pointwiseProduct(factors).normalize(query))
 
 	def sumOut(self, var, factor):
 		r = factor.sumOut(var, self.bn)
@@ -228,12 +263,15 @@ class ProbabilisticInferenceSystem:
 		print "ptwPdt " + str(r)
 		return r
 
-	def normalize(self, factor):
-		print "~~~~~~~"
-		print factor
+	# def normalize(self, factor, query):
+	# 	print "~~~~~~~"
+	# 	print factor
 
-	def writeToLog(self, keyword, goal = None):
-		pass
+
+
+	def writeToLog(self, f):
+		text = Decimal(f).quantize(Decimal('.01'))
+		self.log += str(text) + '\n'
 
 	def exportTextFile(self, fileName):
 		f = open(fileName, "w")
