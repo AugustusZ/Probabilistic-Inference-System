@@ -274,7 +274,6 @@ class ProbabilisticInferenceSystem:
 		print query
 		u = self.getUtility();
 		print u
-		print "new query is: " + query.getAllWithSigns()
 		utility = 0
 		for tf in [True, False]:
 			sign = '+' if tf else '-'
