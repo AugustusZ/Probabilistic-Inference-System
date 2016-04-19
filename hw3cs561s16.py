@@ -20,7 +20,7 @@ def isNumber(string):
 	return bool(pattern.match(string))
 
 def nextLine(f):
-	return f.readline().rstrip('\r\n')
+	return f.readline().rstrip('\r\n').rstrip(' ')
 
 ###############################################################################
 # class definitions:
@@ -49,6 +49,48 @@ class Event:
 	def __str__(self):
 		return self.__repr__()
 
+class Utility:
+	def __init__(self, headerLine, dataLines):
+		# self.var = filter(None, re.split("[| ]+", headerLine))
+		self.var = headerLine.split(' | ')[1].split(' ')
+		self.ut = {}
+		print dataLines
+		for dataLine in dataLines:
+			[valStr,signs] = dataLine.split(' ', 1)
+			print signs
+			keyBool = [(True if sign == '+' else False) for sign in signs.split(' ')]
+			# keyBool = True if signs == '+' else False
+			self.ut.update({tuple(keyBool): int(valStr)})
+	
+	@classmethod
+	def fromLines(cls, headerLine, dataLines):
+		var = filter(None, re.split("[| ]+", headerLine))
+
+		if dataLines[0] == 'decision':
+			cpt = {(True,): 1, (False,): 1}
+			return cls(var, cpt)
+		else:
+			cpt = {}
+			entries = [cls.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
+			map(cpt.update, entries)
+			return cls(var, cpt)
+
+	@classmethod
+	def makeEntry(cls, ls):
+		value = float(ls[0])
+		if len(ls) == 1:
+			return {(True,): value, (False,): 1 - value}
+		else:
+			originalKey = [(True if sign == '+' else False) for sign in ls[1].split(' ')]
+			return {tuple([True] + originalKey) : value, tuple([False] + originalKey) : 1 - value}
+
+	def getVariables(self):
+		return self.var[:]
+	def getValue(self, k):
+		return self.ut[k]
+	def __repr__(self):
+		return ', '.join(self.var) + '\n\t' + '\n\t'.join(str(e) + ' : ' + str(self.ut[e]) for e in self.ut) + '\n\n'
+
 class Factor:
 	# http://stackoverflow.com/a/141777/5920930
 	def __init__(self, var, cpt):
@@ -63,25 +105,15 @@ class Factor:
 	def fromLines(cls, headerLine, dataLines):
 		var = filter(None, re.split("[| ]+", headerLine))
 		# print dataLines
-		if False:#var[0] == 'utility':
-			# cpt = {}
-			# for dataLine in dataLines:
-			# 	[valStr,sign] = dataLine.split(' ')
-			# 	keyBool = True if sign == '+' else False
 
-			# 	cpt.update({(True, keyBool): float(valStr)})
-			# 	cpt.update({(False, keyBool): 0})
-			# return cls(var, cpt)
-			pass
+		if dataLines[0] == 'decision':
+			cpt = {(True,): 1, (False,): 1}
+			return cls(var, cpt)
 		else:
-			if dataLines[0] == 'decision':
-				cpt = {(True,): 1, (False,): 1}
-				return cls(var, cpt)
-			else:
-				cpt = {}
-				entries = [cls.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
-				map(cpt.update, entries)
-				return cls(var, cpt)
+			cpt = {}
+			entries = [cls.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
+			map(cpt.update, entries)
+			return cls(var, cpt)
 
 	@classmethod
 	def makeEntry(cls, ls):
@@ -169,9 +201,6 @@ class Factor:
 	def getVariables(self):
 		return self.var[:] # a list of string
 
-	def isUtility(self):
-		return self.var[0] == 'utility'
-
 	def __repr__(self):
 		return ', '.join(self.var) + '\n\t' + '\n\t'.join(str(e) + ' : ' + str(self.cpt[e]) for e in self.cpt) + '\n\n'
 
@@ -200,7 +229,12 @@ class Query:
 		return {event.event : event.outcome for event in self.e} if bool(self.e) else {}
 	def getVariablesEvents(self):
 		return {event.event : event.outcome for event in self.x}
-
+	def getEventOutcome(self, k):
+		d = copy.deepcopy(self.getEvidencesEvents())
+		d.update(self.getVariablesEvents())
+		return d[k]
+		# allEvents = self.x + self.e if bool(self.e) else self.x
+		# return for event in allEvents
 	def getAllWithSigns(self):
 		# for utility:
 		# EU(Infiltration = + | LeakIdea = +) =>
@@ -234,19 +268,33 @@ class ProbabilisticInferenceSystem:
 		while True:
 			line = nextLine(f)
 			if bool(line):
-				factorHeaderLine = ""
-				factorDataLines = []
+				headerLine = ""
+				dataLines = []
 				currentLineIsHeader = True
-				while bool(line) and not '*' in line:
-					if currentLineIsHeader:
-						factorHeaderLine = line
-						currentLineIsHeader = False
-						line = nextLine(f)
-					else:
-						factorDataLines.append(line)
-						line = nextLine(f)
-				factor = Factor.fromLines(factorHeaderLine, factorDataLines)
-				self.bn.append(factor)
+				if line[0] == 'u':
+					print "this is a utility"
+					while bool(line):
+						# self.utility = Utility(,)
+						if currentLineIsHeader:
+							headerLine = line
+							line = nextLine(f)
+							currentLineIsHeader = False
+						else:
+							dataLines.append(line)
+							line = nextLine(f)
+					self.utility = Utility(headerLine, dataLines)
+					print self.utility
+				else:
+					while bool(line) and not '*' in line:
+						if currentLineIsHeader:
+							headerLine = line
+							line = nextLine(f)
+							currentLineIsHeader = False
+						else:
+							dataLines.append(line)
+							line = nextLine(f)
+					factor = Factor.fromLines(headerLine, dataLines)
+					self.bn.append(factor)
 			else:
 				break
 
@@ -272,26 +320,78 @@ class ProbabilisticInferenceSystem:
 	def calculateEU(self, query):
 		print ">>> calculate - EU"
 		print query
-		u = self.getUtility();
+		u = self.utility
 		print u
-		utility = 0
-		for tf in [True, False]:
-			sign = '+' if tf else '-'
-			pQueryString = 'P(' + u.getVariables()[1] + ' = ' + sign + ' | ' + query.getAllWithSigns() + ')'
-			p = self.eliminationAsk(Query(pQueryString))
-			print pQueryString + ' = ' + str(p)
-			utility = utility + u.cpt[(True, tf)] * p
-		return utility
+		# calculate p vector
+		pQueryEString = query.getAllWithSigns()
+		pQueryXList = filter(lambda x: not x in query.getVariables(), u.getVariables())
+		commonXList = filter(lambda x: x in query.getVariables(), u.getVariables())
+		
+		
+		pQueryXStringList = self.getpQueryXStringList(pQueryXList)
+		pVector = []
+		for pQueryXString in pQueryXStringList:
+			pQueryString = 'P(' + pQueryXString + ' | ' + pQueryEString + ')'
+			print pQueryString
+			pVector.append(self.eliminationAsk(Query(pQueryString)))
+		print pVector
+
+		# uQueryFixedXList
+		# uQueryVariaXList
+		# uQueryXListString = .uQueryXList
+
+		uQueryXList = u.getVariables()
+		for i,x in enumerate(u.getVariables()): # E B F G
+			if x in commonXList: # B G
+				uQueryXList[i] = query.getEventOutcome(x)
+		uQueryKeys = self.getuQueryKeys(uQueryXList)
+		print uQueryKeys
+		# calculate u vector
+		uVector = [u.getValue(key) for key in uQueryKeys]
+		print 'uVector = ', uVector
+		#
+		return numpy.dot(pVector, uVector)
+		# for tf in [True, False]:
+		# 	sign = '+' if tf else '-'
+		# 	for utilityVar in u.getVariables():
+		# 		pQueryString = 'P(' + u.getVariables() + ' = ' + sign + ' | ' + query.getAllWithSigns() + ')'
+		# 		p = self.eliminationAsk(Query(pQueryString))
+		# 		print pQueryString + ' = ' + str(p)
+		# 		utility = utility + u.cpt[(True, tf)] * p
+
+	def getuQueryKeys(self, uQueryXList):
+		tfInd = []
+		for i, uQueryX in enumerate(uQueryXList):
+			if type(uQueryX) is str:
+				tfInd.append(i)
+		tfCombinationList = getTruthCombination(len(tfInd))
+
+		uQueryKeys = []
+		for tfCombination in tfCombinationList:
+			uQueryKey = uQueryXList[:]
+			for i, tf in zip(tfInd, tfCombination):
+				uQueryKey[i] = tf
+			uQueryKeys.append(tuple(uQueryKey))
+		return uQueryKeys
+
+
+
+	def getpQueryXStringList(self, pQueryXList):
+		tfCombinationList = getTruthCombination(len(pQueryXList))
+		pQueryXStringList = []
+		for tfCombination in tfCombinationList:
+			eventStringList = []
+			for pQueryX, tf in zip(pQueryXList, tfCombination):
+				sign = '+' if tf else '-'
+				eventStringList.append(pQueryX + ' = ' + sign)
+			pQueryXStringList.append(', '.join(eventStringList))
+		return pQueryXStringList
+
 
 	def calculateMEU(self, query):
 		# print ">>> calculate - MEU"
 		# print query
 		return 0
-
-	def getUtility(self):
-		for each in self.bn:
-			if each.isUtility():
-				return each
 
 	def eliminationAsk(self, query):
 		X = query.getVariables()
