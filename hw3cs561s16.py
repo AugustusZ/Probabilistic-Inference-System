@@ -54,35 +54,11 @@ class Utility:
 		# self.var = filter(None, re.split("[| ]+", headerLine))
 		self.var = headerLine.split(' | ')[1].split(' ')
 		self.ut = {}
-		print dataLines
 		for dataLine in dataLines:
 			[valStr,signs] = dataLine.split(' ', 1)
-			print signs
 			keyBool = [(True if sign == '+' else False) for sign in signs.split(' ')]
 			# keyBool = True if signs == '+' else False
 			self.ut.update({tuple(keyBool): int(valStr)})
-	
-	@classmethod
-	def fromLines(cls, headerLine, dataLines):
-		var = filter(None, re.split("[| ]+", headerLine))
-
-		if dataLines[0] == 'decision':
-			cpt = {(True,): 1, (False,): 1}
-			return cls(var, cpt)
-		else:
-			cpt = {}
-			entries = [cls.makeEntry(dataLine.split(' ', 1)) for dataLine in dataLines]
-			map(cpt.update, entries)
-			return cls(var, cpt)
-
-	@classmethod
-	def makeEntry(cls, ls):
-		value = float(ls[0])
-		if len(ls) == 1:
-			return {(True,): value, (False,): 1 - value}
-		else:
-			originalKey = [(True if sign == '+' else False) for sign in ls[1].split(' ')]
-			return {tuple([True] + originalKey) : value, tuple([False] + originalKey) : 1 - value}
 
 	def getVariables(self):
 		return self.var[:]
@@ -229,19 +205,30 @@ class Query:
 		return {event.event : event.outcome for event in self.e} if bool(self.e) else {}
 	def getVariablesEvents(self):
 		return {event.event : event.outcome for event in self.x}
+
 	def getEventOutcome(self, k):
 		d = copy.deepcopy(self.getEvidencesEvents())
 		d.update(self.getVariablesEvents())
 		return d[k]
 		# allEvents = self.x + self.e if bool(self.e) else self.x
 		# return for event in allEvents
+	def getEvidencesStringWithSign(self):
+		return ', '.join([(ev.event + ' = ' + ( '+' if ev.outcome else '-') ) for ev in self.e]) if bool(self.e) else ''
+
 	def getAllWithSigns(self):
 		# for utility:
 		# EU(Infiltration = + | LeakIdea = +) =>
 		# Infiltration = +, LeakIdea = +
-		xString = ', '.join([str(event.event) + ' = ' + '+' if event.outcome else '-' for event in self.x])
-		eString = ', '.join([str(event.event) + ' = ' + '+' if event.outcome else '-' for event in self.e]) if bool(self.e) else ''
-		return xString + (', ' + eString if bool(self.e) else '')
+
+		xString = ', '.join([(ev.event + ' = ' + ( '+' if ev.outcome else '-') ) for ev in self.x])
+		eString = self.getEvidencesStringWithSign()
+		#', '.join([(ev.event + ' = ' + ( '+' if ev.outcome else '-') ) for ev in self.e]) if bool(self.e) else ''
+		return xString + ((', ' + eString) if bool(self.e) else '')
+
+	def getXSigns(self):
+		# return a tuple
+		return tuple(['+' if event.outcome else '-' for event in self.x])
+
 
 	def __repr__(self):
 		return self.queryType + '(' + ', '.join(str(X) for X in self.x) + (' | ' + ', '.join(str(E) for E in self.e) if self.isConditional else '') + ')'
@@ -272,7 +259,6 @@ class ProbabilisticInferenceSystem:
 				dataLines = []
 				currentLineIsHeader = True
 				if line[0] == 'u':
-					print "this is a utility"
 					while bool(line):
 						# self.utility = Utility(,)
 						if currentLineIsHeader:
@@ -283,7 +269,6 @@ class ProbabilisticInferenceSystem:
 							dataLines.append(line)
 							line = nextLine(f)
 					self.utility = Utility(headerLine, dataLines)
-					print self.utility
 				else:
 					while bool(line) and not '*' in line:
 						if currentLineIsHeader:
@@ -302,12 +287,7 @@ class ProbabilisticInferenceSystem:
 
 	def analyze(self):
 		# print 
-		print '************ bn ****************'
-		print self.bn
-		print '********************************'
-
 		for query in self.queryList:
-			print query
 			if query.queryType == 'P':
 				result = self.eliminationAsk(query)
 			elif query.queryType == 'EU':
@@ -318,46 +298,31 @@ class ProbabilisticInferenceSystem:
 		self.exportTextFile("output.txt")
 
 	def calculateEU(self, query):
-		print ">>> calculate - EU"
-		print query
 		u = self.utility
-		print u
 		# calculate p vector
-		pQueryEString = query.getAllWithSigns()
+		pQueryEString = query.getAllWithSigns() #### here is the problem!
 		pQueryXList = filter(lambda x: not x in query.getVariables(), u.getVariables())
 		commonXList = filter(lambda x: x in query.getVariables(), u.getVariables())
-		
-		
-		pQueryXStringList = self.getpQueryXStringList(pQueryXList)
+
+		pQueryXStringList = self.getQueryXStringList(pQueryXList)
 		pVector = []
 		for pQueryXString in pQueryXStringList:
 			pQueryString = 'P(' + pQueryXString + ' | ' + pQueryEString + ')'
-			print pQueryString
 			pVector.append(self.eliminationAsk(Query(pQueryString)))
-		print pVector
-
-		# uQueryFixedXList
-		# uQueryVariaXList
-		# uQueryXListString = .uQueryXList
+			# print pQueryString
 
 		uQueryXList = u.getVariables()
 		for i,x in enumerate(u.getVariables()): # E B F G
 			if x in commonXList: # B G
 				uQueryXList[i] = query.getEventOutcome(x)
 		uQueryKeys = self.getuQueryKeys(uQueryXList)
-		print uQueryKeys
 		# calculate u vector
 		uVector = [u.getValue(key) for key in uQueryKeys]
-		print 'uVector = ', uVector
-		#
+		# #
+		# print 'XList=',pQueryXStringList,'pVector=',pVector
+		# print 'uQueryKeys=',uQueryKeys,'uVector=',uVector
+		# print 
 		return numpy.dot(pVector, uVector)
-		# for tf in [True, False]:
-		# 	sign = '+' if tf else '-'
-		# 	for utilityVar in u.getVariables():
-		# 		pQueryString = 'P(' + u.getVariables() + ' = ' + sign + ' | ' + query.getAllWithSigns() + ')'
-		# 		p = self.eliminationAsk(Query(pQueryString))
-		# 		print pQueryString + ' = ' + str(p)
-		# 		utility = utility + u.cpt[(True, tf)] * p
 
 	def getuQueryKeys(self, uQueryXList):
 		tfInd = []
@@ -374,24 +339,30 @@ class ProbabilisticInferenceSystem:
 			uQueryKeys.append(tuple(uQueryKey))
 		return uQueryKeys
 
-
-
-	def getpQueryXStringList(self, pQueryXList):
-		tfCombinationList = getTruthCombination(len(pQueryXList))
-		pQueryXStringList = []
+	def getQueryXStringList(self, QueryXList):
+		tfCombinationList = getTruthCombination(len(QueryXList))
+		QueryXStringList = []
 		for tfCombination in tfCombinationList:
 			eventStringList = []
-			for pQueryX, tf in zip(pQueryXList, tfCombination):
+			for QueryX, tf in zip(QueryXList, tfCombination):
 				sign = '+' if tf else '-'
-				eventStringList.append(pQueryX + ' = ' + sign)
-			pQueryXStringList.append(', '.join(eventStringList))
-		return pQueryXStringList
-
+				eventStringList.append(QueryX + ' = ' + sign)
+			QueryXStringList.append(', '.join(eventStringList))
+		return QueryXStringList
 
 	def calculateMEU(self, query):
-		# print ">>> calculate - MEU"
-		# print query
-		return 0
+		euQueryXStringList = self.getQueryXStringList(query.getVariables())
+		euQueryEString = query.getEvidencesStringWithSign()
+
+		allUtilities = {}
+		for euQueryXString in euQueryXStringList:
+			euQueryString = 'EU(' + euQueryXString +  ((' | ' + euQueryEString) if query.isConditional else '') + ')'
+			euQuery = Query(euQueryString)
+			allUtilities.update({euQuery.getXSigns() : self.calculateEU(euQuery)})
+		meuKey = max(allUtilities.iterkeys(), key=lambda k: allUtilities[k])
+		meuVal = allUtilities[meuKey] # int
+		return meuKey, meuVal
+
 
 	def eliminationAsk(self, query):
 		X = query.getVariables()
@@ -428,7 +399,10 @@ class ProbabilisticInferenceSystem:
 		elif task == 'EU':
 			text = int(round(result))
 		elif task == 'MEU':
-			text = result ###??
+			# result = (TUPLE, INT)
+			keyStr = ' '.join(result[0])
+			valStr = str(int(round(result[1])))
+			text = keyStr + ' ' + valStr
 		self.log += str(text) + '\n'
 
 	def exportTextFile(self, fileName):
@@ -437,9 +411,9 @@ class ProbabilisticInferenceSystem:
 		f.close()
 
 def main(argv):
-	ProbabilisticInferenceSystem('samples/sample02.txt').analyze()
-	# if argv[1] == '-i':
-	# 	pis = ProbabilisticInferenceSystem(argv[2])
-	# 	pis.analyze()
+	# ProbabilisticInferenceSystem('samples/sample02.txt').analyze()
+	if argv[1] == '-i':
+		pis = ProbabilisticInferenceSystem(argv[2])
+		pis.analyze()
 
 if __name__ == "__main__": main(sys.argv)
