@@ -46,8 +46,6 @@ class Event:
 
 	def __repr__(self):
 		return self.event + (' = ' + ('+' if self.outcome else '-') if self.isDecided else '')
-	def __str__(self):
-		return self.__repr__()
 
 class Utility:
 	def __init__(self, headerLine, dataLines):
@@ -57,7 +55,6 @@ class Utility:
 		for dataLine in dataLines:
 			[valStr,signs] = dataLine.split(' ', 1)
 			keyBool = [(True if sign == '+' else False) for sign in signs.split(' ')]
-			# keyBool = True if signs == '+' else False
 			self.ut.update({tuple(keyBool): int(valStr)})
 
 	def getVariables(self):
@@ -100,17 +97,15 @@ class Factor:
 			originalKey = [(True if sign == '+' else False) for sign in ls[1].split(' ')]
 			return {tuple([True] + originalKey) : value, tuple([False] + originalKey) : 1 - value}
 
-
 	def pointwiseProduct(self, other, bn):
-		# vars = self.unionVar(self.var, other.var)
-		vars = list(set(self.var) | set(other.var))
-		cpt = dict((self.event_values(e, vars), self.p(e) * other.p(e)) for e in self.all_events(vars, bn, {}))
-		return Factor(vars, cpt)
+		varList = list(set(self.var) | set(other.var))
+		cpt = dict((self.event_values(e, varList), self.p(e) * other.p(e)) for e in self.all_events(varList, bn, {}))
+		return Factor(varList, cpt)
 
 	def sumOut(self, var, bn):
-		vars = [X for X in self.var if X != var]
-		cpt = dict((self.event_values(e, vars), sum(self.p(self.extend(e, var, val)) for val in [True, False])) for e in self.all_events(vars, bn, {}))
-		return Factor(vars, cpt)
+		varList = [X for X in self.var if not X == var]
+		cpt = dict((self.event_values(e, varList), sum(self.p(self.extend(e, var, val)) for val in [True, False])) for e in self.all_events(varList, bn, {}))
+		return Factor(varList, cpt)
 
 	def normalize(self, query):#occurrence
 		# assert len(self.var) == 1
@@ -140,39 +135,34 @@ class Factor:
 		# return {self.var[0] : dict((k, v) for ((k,), v) in self.cpt.items())}
 
 	def all_events(self, vars, bn, e):
-		"Yield every way of extending e with values for all vars."
-		if not vars:
-			yield e
-		else:
+		if bool(vars):
 			X, rest = vars[0], vars[1:]
 			for e1 in self.all_events(rest, bn, e):
 				for x in [True, False]:
 					yield self.extend(e1, X, x)
+		else:
+			yield e
+
 	def p(self, e):
-		"Look up my value tabulated for e."
 		return self.cpt[self.event_values(e, self.var)]
 
 	def extend(self, s, var, val):
 		# extend({x: 1}, y, 2) = {y: 2, x: 1}
-		s2 = s.copy()
+		s2 = copy.deepcopy(s)
 		s2[var] = val
 		return s2
 
-	def event_values(self, event, vars):
-		# """Return a tuple of the values of variables vars in event.
+	def event_values(self, event, varList):
+		# """Return a tuple of the values of variables varList in event.
 		# >>> event_values ({'A': 10, 'B': 9, 'C': 8}, ['C', 'A'])
 		# (8, 10)
 		# >>> event_values `((1, 2), ['C', 'A'])
 		# (1, 2)
 		# """
-		if isinstance(event, tuple) and len(event) == len(vars):
+		if isinstance(event, tuple) and len(event) == len(varList):
 			return event
 		else:
-			return tuple([event[var] for var in vars])
-
-	# def unionVar(self, v1, v2):
-	# 	v = v1 + v2
-	# 	return v
+			return tuple([event[var] for var in varList])
 
 	def getVariables(self):
 		return self.var[:] # a list of string
@@ -210,8 +200,7 @@ class Query:
 		d = copy.deepcopy(self.getEvidencesEvents())
 		d.update(self.getVariablesEvents())
 		return d[k]
-		# allEvents = self.x + self.e if bool(self.e) else self.x
-		# return for event in allEvents
+
 	def getEvidencesStringWithSign(self):
 		return ', '.join([(ev.event + ' = ' + ( '+' if ev.outcome else '-') ) for ev in self.e]) if bool(self.e) else ''
 
@@ -222,13 +211,11 @@ class Query:
 
 		xString = ', '.join([(ev.event + ' = ' + ( '+' if ev.outcome else '-') ) for ev in self.x])
 		eString = self.getEvidencesStringWithSign()
-		#', '.join([(ev.event + ' = ' + ( '+' if ev.outcome else '-') ) for ev in self.e]) if bool(self.e) else ''
 		return xString + ((', ' + eString) if bool(self.e) else '')
 
 	def getXSigns(self):
-		# return a tuple
+		# return a tuple of string
 		return tuple(['+' if event.outcome else '-' for event in self.x])
-
 
 	def __repr__(self):
 		return self.queryType + '(' + ', '.join(str(X) for X in self.x) + (' | ' + ', '.join(str(E) for E in self.e) if self.isConditional else '') + ')'
@@ -260,7 +247,6 @@ class ProbabilisticInferenceSystem:
 				currentLineIsHeader = True
 				if line[0] == 'u':
 					while bool(line):
-						# self.utility = Utility(,)
 						if currentLineIsHeader:
 							headerLine = line
 							line = nextLine(f)
@@ -282,7 +268,6 @@ class ProbabilisticInferenceSystem:
 					self.bn.append(factor)
 			else:
 				break
-
 		f.close()
 
 	def analyze(self):
@@ -300,8 +285,13 @@ class ProbabilisticInferenceSystem:
 	def calculateEU(self, query):
 		u = self.utility
 		# calculate p vector
-		pQueryEString = query.getAllWithSigns() #### here is the problem!
+		pQueryEString = query.getAllWithSigns() 
 		pQueryXList = filter(lambda x: not x in query.getVariables(), u.getVariables())
+		
+		if pQueryXList == []:
+			# pVector = [1] * len(pQueryXList)
+			return u.getValue(tuple(query.getEventOutcome(each) for each in u.getVariables()))
+
 		commonXList = filter(lambda x: x in query.getVariables(), u.getVariables())
 
 		pQueryXStringList = self.getQueryXStringList(pQueryXList)
@@ -309,7 +299,6 @@ class ProbabilisticInferenceSystem:
 		for pQueryXString in pQueryXStringList:
 			pQueryString = 'P(' + pQueryXString + ' | ' + pQueryEString + ')'
 			pVector.append(self.eliminationAsk(Query(pQueryString)))
-			# print pQueryString
 
 		uQueryXList = u.getVariables()
 		for i,x in enumerate(u.getVariables()): # E B F G
@@ -318,10 +307,6 @@ class ProbabilisticInferenceSystem:
 		uQueryKeys = self.getuQueryKeys(uQueryXList)
 		# calculate u vector
 		uVector = [u.getValue(key) for key in uQueryKeys]
-		# #
-		# print 'XList=',pQueryXStringList,'pVector=',pVector
-		# print 'uQueryKeys=',uQueryKeys,'uVector=',uVector
-		# print 
 		return numpy.dot(pVector, uVector)
 
 	def getuQueryKeys(self, uQueryXList):
@@ -360,9 +345,8 @@ class ProbabilisticInferenceSystem:
 			euQuery = Query(euQueryString)
 			allUtilities.update({euQuery.getXSigns() : self.calculateEU(euQuery)})
 		meuKey = max(allUtilities.iterkeys(), key=lambda k: allUtilities[k])
-		meuVal = allUtilities[meuKey] # int
+		meuVal = allUtilities[meuKey]
 		return meuKey, meuVal
-
 
 	def eliminationAsk(self, query):
 		X = query.getVariables()
@@ -373,13 +357,8 @@ class ProbabilisticInferenceSystem:
 
 		for var in allVar: # var is a string
 			if not var in e and not var in X:
-				# print "var:\n" + var + '\n'
-				# print "factors:\n " + str(factors)
 				relevantFactors = filter(lambda f: var in f.getVariables(), factors)
 				factors = [f for f in factors if f not in relevantFactors]
-				# print "relevantFactors:\n " + str(relevantFactors)
-				# print '*********'
-				# print 
 				factors.append(self.sumOut(var, self.pointwiseProduct(relevantFactors)))
 		return self.pointwiseProduct(factors).normalize(query)
 
@@ -411,7 +390,7 @@ class ProbabilisticInferenceSystem:
 		f.close()
 
 def main(argv):
-	# ProbabilisticInferenceSystem('samples/sample02.txt').analyze()
+	# ProbabilisticInferenceSystem('samples/sample03.txt').analyze()
 	if argv[1] == '-i':
 		pis = ProbabilisticInferenceSystem(argv[2])
 		pis.analyze()
